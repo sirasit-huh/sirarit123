@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="th" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบจำแนกสายพันธุ์ปลาและสัตว์น้ำทะเล | Marine Fishery Intelligence</title>
+    <!-- Tailwind CSS & DaisyUI -->
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.23/dist/full.min.css" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Fonts: Prompt & Plus Jakarta Sans -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        marine: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            200: '#bae6fd',
+                            500: '#0ea5e9',
+                            600: '#0284c7',
+                            700: '#0369a1',
+                            800: '#075985',
+                            900: '#0c4a6e',
+                            950: '#082f49'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Prompt', 'Plus Jakarta Sans', sans-serif;
+            background-color: #f8fafc;
+        }
+        .font-code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            height: 6px;
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background-color: #cbd5e1;
+            border-radius: 9999px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col text-slate-800 antialiased">
+
+    <!-- Top Navigation -->
+    <header class="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200 shadow-xs">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-marine-700 text-white flex items-center justify-center font-bold text-lg shadow-sm">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-base sm:text-lg font-bold text-slate-900 leading-none">
+                        ระบบจำแนกสายพันธุ์ปลาและสัตว์น้ำทะเล
+                    </h1>
+                    <p class="text-xs text-slate-500 font-medium mt-1">
+                        Marine Fishery Intelligence System
+                    </p>
+                </div>
+            </div>
+
+            <!-- Model Switcher Pill in Navbar -->
+            <div class="flex items-center gap-2 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                <span class="text-xs font-semibold text-slate-500 pl-2 hidden md:inline">อัลกอริทึม:</span>
+                <button type="button" 
+                        class="model-tab px-3 py-1.5 rounded-lg text-xs font-semibold transition-all bg-white text-marine-700 shadow-xs" 
+                        data-model="Support Vector Machine (SVM)">
+                    SVM (100%)
+                </button>
+                <button type="button" 
+                        class="model-tab px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 transition-all" 
+                        data-model="Random Forest">
+                    Random Forest (99.11%)
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+        <!-- Banner Info Card -->
+        <div class="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div class="space-y-1">
+                <div class="flex items-center gap-2">
+                    <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        พร้อมใช้งานสำหรับงานประมงและตลาดปลา
+                    </span>
+                    <span class="text-xs text-slate-400">•</span>
+                    <span class="text-xs text-slate-500 font-medium">9 สายพันธุ์เศรษฐกิจ</span>
+                </div>
+                <h2 class="text-lg sm:text-xl font-bold text-slate-900">
+                    แพลตฟอร์มวิเคราะห์สัณฐานวิทยาและคุณลักษณะตัวเลขทางสถิติของสัตว์น้ำ
+                </h2>
+                <p class="text-xs sm:text-sm text-slate-500 max-w-2xl">
+                    ระบบดึงเวกเตอร์คุณลักษณะ 1,280 มิติด้วยโครงข่าย MobileNetV2 และประมวลผลการจัดจำแนกผ่าน Scikit-learn พร้อมแสดงตัวเลขทางสถิติจริงที่โมเดลใช้ในการตัดสินใจ
+                </p>
+            </div>
+        </div>
+
+        <!-- 2-Column Responsive Layout -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+            <!-- Left Panel: Input & Visual Samples (5 cols) -->
+            <div class="lg:col-span-5 space-y-5">
+
+                <!-- Upload Card -->
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-4">
+                    <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                        <h3 class="font-bold text-slate-900 text-sm flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-marine-600"></span>
+                            เลือกภาพปลาเพื่อส่งเข้าโมเดล
+                        </h3>
+                        <span class="text-xs text-slate-400">JPG, PNG</span>
+                    </div>
+
+                    <!-- Dropzone -->
+                    <div id="drop-zone" class="border-2 border-dashed border-slate-200 hover:border-marine-500 rounded-xl p-6 text-center cursor-pointer transition-all bg-slate-50/70 hover:bg-marine-50/40">
+                        <input type="file" id="file-input" accept="image/*" class="hidden">
+                        
+                        <div id="upload-placeholder" class="space-y-2">
+                            <div class="w-12 h-12 mx-auto rounded-full bg-marine-100 text-marine-700 flex items-center justify-center">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                </svg>
+                            </div>
+                            <div class="text-sm font-semibold text-slate-800">
+                                คลิกเพื่อเลือกภาพ หรือลากไฟล์มาวางที่นี่
+                            </div>
+                            <div class="text-xs text-slate-500">
+                                รองรับการถ่ายภาพสดจากมือถือ หรือภาพถ่ายจากสะพานปลา
+                            </div>
+                        </div>
+
+                        <!-- Active Image Preview -->
+                        <div id="preview-wrapper" class="hidden space-y-3">
+                            <div class="relative max-h-56 overflow-hidden rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center">
+                                <img id="preview-img" src="" alt="ภาพตัวอย่าง" class="max-h-56 w-auto object-contain">
+                            </div>
+                            <div class="flex items-center justify-between text-xs text-slate-600 px-1">
+                                <span id="img-name-label" class="font-medium truncate max-w-[200px]">sample.png</span>
+                                <button type="button" id="btn-clear" class="text-red-600 hover:underline font-medium">ลบภาพ</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Visual Thumbnail Gallery of 9 Species -->
+                    <div class="space-y-2 pt-1">
+                        <label class="text-xs font-semibold text-slate-600 flex items-center justify-between">
+                            <span>หรือเลือกทดสอบจากตัวอย่าง 9 ชนิดพันธุ์:</span>
+                            <span class="text-[11px] text-slate-400 font-normal">คลิกเพื่อเลือกทันที</span>
+                        </label>
+                        
+                        <div class="grid grid-cols-3 gap-2 max-h-52 overflow-y-auto custom-scrollbar p-1">
+                            {% for s in samples %}
+                            <div class="sample-card group cursor-pointer border border-slate-200 hover:border-marine-600 rounded-xl p-2 bg-slate-50 hover:bg-marine-50/50 transition-all text-left"
+                                 data-filename="{{ s.filename }}"
+                                 data-species="{{ s.species }}">
+                                <div class="aspect-4/3 w-full bg-white rounded-lg overflow-hidden border border-slate-100 mb-1.5 flex items-center justify-center">
+                                    <img src="/sample_images/{{ s.filename }}" alt="{{ s.species }}" class="w-full h-full object-contain p-1 group-hover:scale-105 transition-transform">
+                                </div>
+                                <div class="text-[11px] font-semibold text-slate-800 truncate">{{ s.species }}</div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <!-- Predict Action Button -->
+                    <button type="button" 
+                            id="btn-run-predict" 
+                            class="w-full py-3 px-4 rounded-xl bg-marine-700 hover:bg-marine-800 active:bg-marine-900 text-white font-semibold text-sm shadow-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            disabled>
+                        <span id="predict-label">วิเคราะห์คุณลักษณะและจำแนกสายพันธุ์</span>
+                        <span id="predict-spinner" class="hidden loading loading-spinner loading-xs"></span>
+                    </button>
+                </div>
+
+            </div>
+
+            <!-- Right Panel: Results & Feature Vector Visualization (7 cols) -->
+            <div class="lg:col-span-7 space-y-5">
+
+                <!-- Placeholder Empty State -->
+                <div id="state-empty" class="bg-white rounded-2xl border border-slate-200 shadow-xs p-10 text-center flex flex-col items-center justify-center min-h-[480px]">
+                    <div class="w-16 h-16 rounded-2xl bg-marine-50 text-marine-600 flex items-center justify-center mb-3">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                        </svg>
+                    </div>
+                    <h4 class="text-base font-bold text-slate-900">
+                        รอการส่งภาพเข้าประมวลผล
+                    </h4>
+                    <p class="text-xs text-slate-500 max-w-sm mt-1 leading-relaxed">
+                        เลือกภาพปลาตัวอย่างจากแผงด้านซ้าย หรืออัปโหลดไฟล์ของคุณ จากนั้นคลิกปุ่ม <strong>"วิเคราะห์คุณลักษณะ"</strong> เพื่อแสดงผลลัพธ์สายพันธุ์และตัวเลขฟีเจอร์ 1,280 มิติ
+                    </p>
+                </div>
+
+                <!-- Active Result Display Area -->
+                <div id="state-result" class="hidden space-y-5">
+
+                    <!-- Result Hero Card -->
+                    <div class="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+                        <div class="bg-gradient-to-r from-marine-900 to-marine-800 text-white p-6">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                <div>
+                                    <div class="flex items-center gap-2 mb-1.5">
+                                        <span id="badge-market" class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-marine-700/80 text-white border border-marine-500/50">
+                                            เกรดพาณิชย์
+                                        </span>
+                                        <span id="badge-active-model" class="text-xs text-marine-200 font-code">
+                                            Model: SVM
+                                        </span>
+                                    </div>
+                                    <h3 id="res-en-title" class="text-2xl sm:text-3xl font-extrabold font-en tracking-tight">
+                                        Red Sea Bream
+                                    </h3>
+                                    <div id="res-th-title" class="text-base font-semibold text-marine-200 mt-0.5">
+                                        ปลากะพงแดงญี่ปุ่น (มาได)
+                                    </div>
+                                    <div id="res-scientific-title" class="text-xs text-marine-300 italic font-en mt-1">
+                                        Pagrus major (Sparidae)
+                                    </div>
+                                </div>
+                                <div class="bg-white/10 backdrop-blur-md rounded-xl p-3.5 sm:text-right border border-white/20 shrink-0">
+                                    <div class="text-[11px] text-marine-200 font-medium uppercase tracking-wider">ความเชื่อมั่นของโมเดล</div>
+                                    <div id="res-conf-score" class="text-3xl font-extrabold font-code text-white">
+                                        99.85%
+                                    </div>
+                                    <div class="text-[10px] text-emerald-300 font-medium mt-0.5">High Certainty Match</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 4 Biological & Market Details Grid -->
+                        <div class="p-5 sm:p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            
+                            <div class="p-4 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1">
+                                <div class="text-xs font-bold text-marine-800 uppercase tracking-wider flex items-center gap-1.5">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-marine-600"></span>
+                                    จุดสังเกตเฉพาะทางสัณฐานวิทยา
+                                </div>
+                                <p id="txt-field-marks" class="text-xs text-slate-700 leading-relaxed"></p>
+                            </div>
+
+                            <div class="p-4 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1">
+                                <div class="text-xs font-bold text-marine-800 uppercase tracking-wider flex items-center gap-1.5">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-marine-600"></span>
+                                    ถิ่นอาศัยและการกระจายตัว
+                                </div>
+                                <p id="txt-habitat" class="text-xs text-slate-700 leading-relaxed"></p>
+                            </div>
+
+                            <div class="p-4 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1">
+                                <div class="text-xs font-bold text-marine-800 uppercase tracking-wider flex items-center gap-1.5">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-marine-600"></span>
+                                    มูลค่าและการตลาดเชิงพาณิชย์
+                                </div>
+                                <p id="txt-commercial" class="text-xs text-slate-700 leading-relaxed"></p>
+                            </div>
+
+                            <div class="p-4 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1">
+                                <div class="text-xs font-bold text-marine-800 uppercase tracking-wider flex items-center gap-1.5">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-marine-600"></span>
+                                    การบริโภคและเมนูยอดนิยม
+                                </div>
+                                <p id="txt-culinary" class="text-xs text-slate-700 leading-relaxed"></p>
+                            </div>
+
+                    </div>
+
+                    <!-- Probability Ranking Breakdown -->
+                    <div class="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 sm:p-6 space-y-3">
+                        <div class="flex justify-between items-center border-b border-slate-100 pb-2">
+                            <h4 class="font-bold text-slate-900 text-sm">
+                                ความน่าจะเป็นของ 4 อันดับแรก (Top Candidates)
+                            </h4>
+                            <span class="text-xs text-slate-400">Probability Distribution</span>
+                        </div>
+                        <div id="candidates-container" class="space-y-3 pt-1">
+                            <!-- Dynamic Candidate Rows -->
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-200 bg-white py-4 text-center text-xs text-slate-400">
+        โครงงาน Machine Learning: ระบบจำแนกสายพันธุ์ปลาและสัตว์น้ำทะเล (MobileNetV2 + Scikit-learn)
+    </footer>
+
+    <!-- Logic Script -->
+    <script>
+        let currentModel = 'Support Vector Machine (SVM)';
+        let chosenFile = null;
+        let chosenSample = null;
+
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const uploadPlaceholder = document.getElementById('upload-placeholder');
+        const previewWrapper = document.getElementById('preview-wrapper');
+        const previewImg = document.getElementById('preview-img');
+        const imgNameLabel = document.getElementById('img-name-label');
+        const btnClear = document.getElementById('btn-clear');
+        const btnRunPredict = document.getElementById('btn-run-predict');
+        const predictLabel = document.getElementById('predict-label');
+        const predictSpinner = document.getElementById('predict-spinner');
+
+        const stateEmpty = document.getElementById('state-empty');
+        const stateResult = document.getElementById('state-result');
+
+        // Model switcher tabs
+        document.querySelectorAll('.model-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.model-tab').forEach(t => {
+                    t.classList.remove('bg-white', 'text-marine-700', 'shadow-xs', 'font-semibold');
+                    t.classList.add('text-slate-600', 'font-medium');
+                });
+                tab.classList.add('bg-white', 'text-marine-700', 'shadow-xs', 'font-semibold');
+                tab.classList.remove('text-slate-600', 'font-medium');
+                
+                currentModel = tab.getAttribute('data-model');
+
+                // If already predicted, re-predict with the new model immediately!
+                if (chosenFile || chosenSample) {
+                    runPrediction();
+                }
+            });
+        });
+
+        // Dropzone interactions
+        dropZone.addEventListener('click', (e) => {
+            if (e.target !== btnClear) {
+                fileInput.click();
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                setUploadedFile(e.target.files[0]);
+            }
+        });
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('border-marine-600', 'bg-marine-50/50');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('border-marine-600', 'bg-marine-50/50');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('border-marine-600', 'bg-marine-50/50');
+            if (e.dataTransfer.files.length > 0) {
+                setUploadedFile(e.dataTransfer.files[0]);
+            }
+        });
+
+        function setUploadedFile(file) {
+            chosenFile = file;
+            chosenSample = null;
+            document.querySelectorAll('.sample-card').forEach(c => c.classList.remove('border-marine-600', 'bg-marine-50'));
+
+            imgNameLabel.innerText = file.name;
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                previewImg.src = ev.target.result;
+                uploadPlaceholder.classList.add('hidden');
+                previewWrapper.classList.remove('hidden');
+                btnRunPredict.disabled = false;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // Clear button
+        btnClear.addEventListener('click', (e) => {
+            e.stopPropagation();
+            resetInputState();
+        });
+
+        function resetInputState() {
+            chosenFile = null;
+            chosenSample = null;
+            fileInput.value = '';
+            uploadPlaceholder.classList.remove('hidden');
+            previewWrapper.classList.add('hidden');
+            btnRunPredict.disabled = true;
+            document.querySelectorAll('.sample-card').forEach(c => c.classList.remove('border-marine-600', 'bg-marine-50'));
+            stateResult.classList.add('hidden');
+            stateEmpty.classList.remove('hidden');
+        }
+
+        // Sample Card Clicks
+        document.querySelectorAll('.sample-card').forEach(card => {
+            card.addEventListener('click', () => {
+                document.querySelectorAll('.sample-card').forEach(c => c.classList.remove('border-marine-600', 'bg-marine-50'));
+                card.classList.add('border-marine-600', 'bg-marine-50');
+
+                chosenSample = card.getAttribute('data-filename');
+                chosenFile = null;
+                fileInput.value = '';
+
+                imgNameLabel.innerText = card.getAttribute('data-species') + ' (ตัวอย่าง)';
+                previewImg.src = '/sample_images/' + chosenSample;
+                uploadPlaceholder.classList.add('hidden');
+                previewWrapper.classList.remove('hidden');
+                btnRunPredict.disabled = false;
+                
+                // Auto run predict on sample click for snappy experience!
+                runPrediction();
+            });
+        });
+
+        btnRunPredict.addEventListener('click', runPrediction);
+
+        async function runPrediction() {
+            if (!chosenFile && !chosenSample) return;
+
+            btnRunPredict.disabled = true;
+            predictLabel.innerText = 'กำลังประมวลผลฟีเจอร์...';
+            predictSpinner.classList.remove('hidden');
+
+            const formData = new FormData();
+            formData.append('model_name', currentModel);
+            if (chosenFile) {
+                formData.append('image_file', chosenFile);
+            } else if (chosenSample) {
+                formData.append('sample_filename', chosenSample);
+            }
+
+            try {
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+
+                if (response.ok) {
+                    renderResult(data);
+                } else {
+                    alert('Error: ' + (data.error || 'Prediction failed'));
+                }
+            } catch (err) {
+                alert('Connection error: ' + err.message);
+            } finally {
+                btnRunPredict.disabled = false;
+                predictLabel.innerText = 'วิเคราะห์คุณลักษณะและจำแนกสายพันธุ์';
+                predictSpinner.classList.add('hidden');
+            }
+        }
+
+        function renderResult(data) {
+            stateEmpty.classList.add('hidden');
+            stateResult.classList.remove('hidden');
+
+            // Header titles
+            document.getElementById('res-en-title').innerText = data.species;
+            document.getElementById('res-th-title').innerText = data.thai_name;
+            document.getElementById('res-scientific-title').innerText = `${data.scientific_name} • Family: ${data.family}`;
+            document.getElementById('res-conf-score').innerText = data.confidence.toFixed(2) + '%';
+            document.getElementById('badge-active-model').innerText = 'Model: ' + data.model_used;
+            document.getElementById('badge-market').innerText = data.market_grade;
+
+            // Details
+            document.getElementById('txt-field-marks').innerText = data.field_marks;
+            document.getElementById('txt-habitat').innerText = data.habitat;
+            document.getElementById('txt-commercial').innerText = data.commercial;
+            document.getElementById('txt-culinary').innerText = data.culinary;
+
+            // Candidates
+            const candContainer = document.getElementById('candidates-container');
+            candContainer.innerHTML = '';
+
+            data.candidates.forEach((cand, idx) => {
+                const isTop = idx === 0;
+                const row = document.createElement('div');
+                row.className = 'space-y-1';
+
+                const barColor = isTop ? 'bg-marine-600' : 'bg-slate-300';
+                const textHighlight = isTop ? 'text-marine-700 font-bold' : 'text-slate-700 font-medium';
+
+                row.innerHTML = `
+                    <div class="flex justify-between items-center text-xs">
+                        <span class="${textHighlight}">
+                            ${cand.species} <span class="text-slate-400 font-normal">(${cand.thai_name})</span>
+                        </span>
+                        <span class="font-code font-bold ${isTop ? 'text-marine-700' : 'text-slate-600'}">
+                            ${cand.probability.toFixed(2)}%
+                        </span>
+                    </div>
+                    <div class="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
+                        <div class="${barColor} h-full rounded-full transition-all duration-500" style="width: ${cand.probability}%"></div>
+                    </div>
+                `;
+                candContainer.appendChild(row);
+            });
+
+            // Scroll if mobile
+            if (window.innerWidth < 1024) {
+                stateResult.scrollIntoView({ behavior: 'smooth' });
+            }
+        }
+    </script>
+</body>
+</html>

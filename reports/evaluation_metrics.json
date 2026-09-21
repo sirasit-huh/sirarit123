@@ -1,0 +1,45 @@
+{
+    "models": {
+        "Support Vector Machine (SVM)": {
+            "accuracy": 1.0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1_score": 1.0,
+            "train_time_sec": 3.1224775314331055,
+            "confusion_matrix_image": "reports\\confusion_matrix_support_vector_machine_(svm).png"
+        },
+        "Random Forest": {
+            "accuracy": 0.9911111111111112,
+            "precision": 0.9915320425864266,
+            "recall": 0.9911111111111112,
+            "f1_score": 0.9911048834618001,
+            "train_time_sec": 0.38992929458618164,
+            "confusion_matrix_image": "reports\\confusion_matrix_random_forest.png"
+        },
+        "Logistic Regression": {
+            "accuracy": 0.9977777777777778,
+            "precision": 0.9978213507625272,
+            "recall": 0.9977777777777778,
+            "f1_score": 0.9977775555333311,
+            "train_time_sec": 0.12809228897094727,
+            "confusion_matrix_image": "reports\\confusion_matrix_logistic_regression.png"
+        }
+    },
+    "best_model": "Support Vector Machine (SVM)",
+    "classes": [
+        "Black Sea Sprat",
+        "Gilt-Head Bream",
+        "Hourse Mackerel",
+        "Red Mullet",
+        "Red Sea Bream",
+        "Sea Bass",
+        "Shrimp",
+        "Striped Red Mullet",
+        "Trout"
+    ],
+    "dataset_counts": {
+        "total": 2250,
+        "train": 1800,
+        "test": 450
+    }
+}
