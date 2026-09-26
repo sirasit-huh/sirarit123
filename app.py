@@ -113,6 +113,15 @@ def get_model_bundle():
         return None
     return joblib.load(model_path)
 
+# Cached AI Background Removal Session
+@st.cache_resource
+def get_rembg_session():
+    try:
+        from rembg import new_session
+        return new_session("u2net")
+    except Exception:
+        return None
+
 # Header
 st.title("Fish Species Classification System")
 st.caption("Automated image classification pipeline utilizing MobileNetV2 feature extraction and Scikit-learn algorithms.")
@@ -178,18 +187,40 @@ with col_left:
                 st.caption(f"Uploaded: {uploaded_file.name} ({selected_image.size[0]} x {selected_image.size[1]} px)")
                 
         if selected_image:
-            st.image(selected_image, width=380)
+            st.image(selected_image, caption="ภาพต้นฉบับ (Original Input)", width=380)
+            use_ai_isolation = st.checkbox(
+                "ตัดพื้นหลังด้วย AI อัตโนมัติ (AI Foreground Isolation)",
+                value=True,
+                help="ตัดสิ่งรบกวนรอบตัวปลา (เขียง, ถาด, โต๊ะ, เงา) ออก เพื่อให้โมเดลโฟกัสเฉพาะตัวปลา ป้องกันการทายผิดจาก Domain Shift"
+            )
             predict_button = st.button("Run Classification", type="primary")
         else:
             predict_button = False
+            use_ai_isolation = False
 
 with col_right:
     if predict_button and selected_image:
         with st.spinner("Processing image and running inference..."):
+            input_image = selected_image
+            if use_ai_isolation:
+                try:
+                    from rembg import remove
+                    rem_sess = get_rembg_session()
+                    work_img = selected_image.copy()
+                    work_img.thumbnail((512, 512), Image.Resampling.LANCZOS)
+                    nobg = remove(work_img, session=rem_sess) if rem_sess else remove(work_img)
+                    white_canvas = Image.new("RGB", nobg.size, (255, 255, 255))
+                    white_canvas.paste(nobg, mask=nobg.split()[3])
+                    input_image = white_canvas
+                    st.image(input_image, caption="ภาพสกัดเฉพาะตัวปลา (Clean Canvas 512x512)", width=380)
+                except Exception as bg_err:
+                    st.warning(f"Background isolation fallback: {bg_err}")
+                    input_image = selected_image
+
             mobilenet, transform = get_feature_extractor()
             
             # Feature extraction
-            tensor_img = transform(selected_image).unsqueeze(0)
+            tensor_img = transform(input_image).unsqueeze(0)
             with torch.no_grad():
                 features = mobilenet(tensor_img).cpu().numpy()
                 

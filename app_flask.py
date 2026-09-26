@@ -1,6 +1,7 @@
 import os
 import io
 import json
+import base64
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify, send_from_directory
 from PIL import Image
@@ -23,6 +24,18 @@ weights = models.MobileNet_V2_Weights.DEFAULT
 mobilenet = models.mobilenet_v2(weights=weights)
 mobilenet.eval()
 mobilenet.classifier = nn.Identity()
+
+# Pre-initialize AI Background Isolation Session (u2net) for lightning fast response
+print("Pre-loading AI Background Isolation Session...")
+try:
+    from rembg import new_session, remove
+    rembg_session = new_session("u2net")
+    REMBG_AVAILABLE = True
+    print("AI Background Isolation Session ready!")
+except Exception as e:
+    print(f"Warning: rembg session note: {e}")
+    rembg_session = None
+    REMBG_AVAILABLE = False
 
 preprocess = transforms.Compose([
     transforms.Resize((224, 224)),
@@ -182,8 +195,31 @@ def predict():
         if img is None:
             return jsonify({"error": "กรุณาอัปโหลดรูปภาพหรือเลือกภาพตัวอย่าง"}), 400
             
+        # Optional: AI Smart Background Isolation (Removes cutting board, table, hands, etc.)
+        isolate_bg = request.form.get("isolate_bg", "false").lower() == "true"
+        processed_img_b64 = None
+        img_for_eval = img
+        
+        if isolate_bg and REMBG_AVAILABLE:
+            try:
+                # Resize large camera images to max 512x512 for instant 1.5s background removal
+                work_img = img.copy()
+                work_img.thumbnail((512, 512), Image.Resampling.LANCZOS)
+                nobg_rgba = remove(work_img, session=rembg_session)
+                white_canvas = Image.new("RGB", nobg_rgba.size, (255, 255, 255))
+                white_canvas.paste(nobg_rgba, mask=nobg_rgba.split()[3])
+                img_for_eval = white_canvas
+                
+                # Base64 Preview for Web Frontend
+                buf = io.BytesIO()
+                white_canvas.save(buf, format="JPEG", quality=85)
+                processed_img_b64 = "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode("utf-8")
+            except Exception as bg_err:
+                print(f"Warning: Background isolation fallback: {bg_err}")
+                img_for_eval = img
+
         # Feature Extraction with MobileNetV2
-        tensor_img = preprocess(img).unsqueeze(0)
+        tensor_img = preprocess(img_for_eval).unsqueeze(0)
         with torch.no_grad():
             feat = mobilenet(tensor_img).cpu().numpy()
             
@@ -235,7 +271,9 @@ def predict():
             "confidence": round(confidence, 2),
             "model_used": model_name,
             "candidates": candidates[:4],
-            "feature_stats": feature_stats
+            "feature_stats": feature_stats,
+            "processed_image": processed_img_b64,
+            "is_isolated": isolate_bg
         })
         
     except Exception as e:

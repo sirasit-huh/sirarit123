@@ -26,7 +26,7 @@ Input Image (224×224) ──► MobileNetV2 (Headless) ──► 1,280-d Featur
 
 ## 2. ชุดข้อมูล (Dataset Overview)
 
-ชุดข้อมูลที่ใช้มาจาก **[A Large Scale Fish Dataset](https://www.kaggle.com/datasets/crowww/a-large-scale-fish-dataset)** บน Kaggle ประกอบด้วยสัตว์น้ำและปลาทะเลจำนวน 9 สายพันธุ์เศรษฐกิจ โดยทำการสุ่มคลาสละ 250 ภาพ (รวม 2,250 ภาพ) เพื่อความสมดุลและความรวดเร็วในการประมวลผล:
+ชุดข้อมูลที่ใช้มาจาก **[A Large Scale Fish Dataset](https://www.kaggle.com/datasets/crowww/a-large-scale-fish-dataset)** บน Kaggle ประกอบด้วยสัตว์น้ำและปลาทะเลจำนวน 9 สายพันธุ์เศรษฐกิจ เพื่อป้องกันปัญหา **Overfitting และ Domain Shift** (ที่โมเดลจำเฉพาะพื้นหลังเดิม) ระบบได้สร้างชุดข้อมูลแบบ **Multi-Background Diversity** ผ่าน Ground Truth Segmentation Mask คลาสละ 600 ภาพ รวมทั้งสิ้น **5,400 ภาพ** (ประกอบด้วยภาพบนถาดสีเดิม, ภาพตัดพื้นหลังขาวบริสุทธิ์, ภาพบนพื้นหลังโทนธรรมชาติ, และภาพกลับด้านสะท้อน):
 
 <div align="center">
   <img src="assets/species_preview_grid.png" alt="Species Samples Grid" width="750">
@@ -48,24 +48,26 @@ Input Image (224×224) ──► MobileNetV2 (Headless) ──► 1,280-d Featur
 
 ## 3. ระเบียบวิธีและการเตรียมข้อมูล (Methodology & Preprocessing)
 
-1. **Image Resizing:** ปรับขนาดภาพทุกภาพเป็น $224 \times 224$ pixels เพื่อให้สอดคล้องกับขนาดมาตรฐานของ MobileNetV2
-2. **ImageNet Normalization:** ปรับมาตรฐานค่าสีตามสถิติของ ImageNet ($\mu = [0.485, 0.456, 0.406]$, $\sigma = [0.229, 0.224, 0.225]$)
-3. **Feature Extraction:** ตัด Classifier Head ของ MobileNetV2 ออก เพื่อดึงเวกเตอร์ขนาด 1,280 มิติ ($X \in \mathbb{R}^{2250 \times 1280}$)
-4. **Train / Test Split:** แบ่งชุดข้อมูลฝึกฝน 80% (1,800 ภาพ) และชุดข้อมูลทดสอบ 20% (450 ภาพ) แบบ Stratified
+1. **Multi-Background Data Augmentation:** สังเคราะห์ภาพตัวอย่างด้วย Ground Truth Mask ให้มีทั้งพื้นหลังเดิม พื้นหลังสีขาว และพื้นหลังโทนสีเขียง/โต๊ะธรรมชาติ เพื่อฝึกให้โมเดลโฟกัสเฉพาะตัวปลาและทนทานต่อภาพจริงภายนอก
+2. **Image Resizing & Normalization:** ปรับขนาดภาพทุกภาพเป็น $224 \times 224$ pixels และทำค่าสีมาตรฐาน ImageNet ($\mu = [0.485, 0.456, 0.406]$, $\sigma = [0.229, 0.224, 0.225]$)
+3. **Deep Feature Extraction:** ใช้โครงข่าย **MobileNetV2** (ตัด Classifier Head ออก) สกัดเวกเตอร์คุณลักษณะขนาด 1,280 มิติ ($X \in \mathbb{R}^{5400 \times 1280}$)
+4. **Stratified Train / Test Split:** แบ่งชุดข้อมูลฝึกฝน 80% (4,320 ภาพ) และชุดข้อมูลทดสอบ 20% (1,080 ภาพ) โดยรักษาสัดส่วนทุกคลาสเท่ากัน
 5. **Standard Scaling:** ปรับสเกลข้อมูลคุณลักษณะด้วย `StandardScaler` ($z = (x - \mu) / \sigma$) บน Train Set เพื่อป้องกัน Data Leakage
+6. **AI Foreground Isolation (Inference Phase):** ติดตั้งระบบสกัดเฉพาะตัวปลาด้วย AI (`rembg`) บน Web Application เพื่อรองรับภาพถ่ายจากภายนอก
 
 ---
 
 ## 4. ผลการทดลองและการเปรียบเทียบโมเดล (Experimental Results)
 
-ทำการฝึกฝนและเปรียบเทียบโมเดล **Scikit-learn** จำนวน 2 โมเดลตามเกณฑ์การประเมิน:
+ทำการฝึกฝนและเปรียบเทียบโมเดล **Scikit-learn** จำนวน 3 โมเดลบนชุดทดสอบขนาด 1,080 ภาพ:
 
 | ขั้นตอนวิธี (Algorithm) | Test Accuracy | Precision (Weighted) | Recall (Weighted) | F1-Score (Weighted) | เวลาฝึกฝน (วินาที) |
 |---|:---:|:---:|:---:|:---:|:---:|
-| **Support Vector Machine (SVM)** | **100.00%** | **100.00%** | **100.00%** | **100.00%** | 3.12 s |
-| **Random Forest Classifier** | **99.11%** | **99.15%** | **99.11%** | **99.11%** | 0.39 s |
+| **Logistic Regression (L2 Regularized)** | **99.91%** | **99.91%** | **99.91%** | **99.91%** | 0.64 s |
+| **Support Vector Machine (SVM, Soft Margin C=1.0)** | **99.81%** | **99.82%** | **99.81%** | **99.81%** | 20.15 s |
+| **Random Forest Classifier** | **99.26%** | **99.27%** | **99.26%** | **99.26%** | 3.51 s |
 
-* **Final Model Selection:** เลือก **Support Vector Machine (SVM)** ด้วย RBF Kernel ($C=10.0$) เนื่องจากสามารถจำแนกชุดข้อมูลทดสอบทั้ง 450 ตัวอย่างได้อย่างสมบูรณ์แบบ
+* **Final Model Selection:** คัดเลือกทั้ง **Logistic Regression** และ **Support Vector Machine (Soft Margin)** ไว้ใน Model Bundle เพื่อให้ผู้ใช้สามารถสลับใช้งานได้แบบ Real-time บนเว็บแอปพลิเคชัน
 
 ### แผนภาพเมทริกซ์ความสับสน (Confusion Matrices)
 

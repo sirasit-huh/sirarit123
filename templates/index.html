@@ -72,17 +72,22 @@
             </div>
 
             <!-- Model Switcher Pill in Navbar -->
-            <div class="flex items-center gap-2 bg-slate-100 p-1 rounded-xl border border-slate-200">
+            <div class="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
                 <span class="text-xs font-semibold text-slate-500 pl-2 hidden md:inline">อัลกอริทึม:</span>
                 <button type="button" 
-                        class="model-tab px-3 py-1.5 rounded-lg text-xs font-semibold transition-all bg-white text-marine-700 shadow-xs" 
+                        class="model-tab px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all bg-white text-marine-700 shadow-xs" 
                         data-model="Support Vector Machine (SVM)">
-                    SVM (100%)
+                    SVM (99.81%)
                 </button>
                 <button type="button" 
-                        class="model-tab px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 transition-all" 
+                        class="model-tab px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 transition-all" 
+                        data-model="Logistic Regression">
+                    Logistic Reg (99.91%)
+                </button>
+                <button type="button" 
+                        class="model-tab px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 transition-all" 
                         data-model="Random Forest">
-                    Random Forest (99.11%)
+                    Random Forest (99.26%)
                 </button>
             </div>
         </div>
@@ -177,6 +182,24 @@
                         </div>
                     </div>
 
+                    <!-- AI Background Isolation Toggle -->
+                    <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5">
+                        <div class="flex items-center justify-between">
+                            <label for="toggle-isolate-bg" class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" id="toggle-isolate-bg" class="checkbox checkbox-sm checkbox-primary rounded" checked>
+                                <span class="text-xs font-semibold text-slate-800">
+                                    ตัดพื้นหลังด้วย AI อัตโนมัติ (Foreground Isolation)
+                                </span>
+                            </label>
+                            <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                แนะนำสำหรับภาพจริง
+                            </span>
+                        </div>
+                        <p class="text-[11px] text-slate-500 leading-normal pl-6">
+                            สกัดเฉพาะตัวปลาและตัดสิ่งรบกวน (เขียง, ถาด, โต๊ะ, เงา) ออก เพื่อป้องกันปัญหาความแม่นยำตกจาก Domain Shift
+                        </p>
+                    </div>
+
                     <!-- Predict Action Button -->
                     <button type="button" 
                             id="btn-run-predict" 
@@ -241,6 +264,27 @@
                                     <div class="text-[10px] text-emerald-300 font-medium mt-0.5">High Certainty Match</div>
                                 </div>
                             </div>
+                        </div>
+
+                        <!-- AI Processed Preview Pill (Shows when background isolation is active) -->
+                        <div id="processed-img-container" class="hidden px-6 py-3 bg-emerald-50/60 border-b border-emerald-100 flex items-center justify-between gap-4">
+                            <div class="flex items-center gap-3">
+                                <div class="w-14 h-12 rounded-lg bg-white border border-emerald-200 overflow-hidden shrink-0 flex items-center justify-center p-1 shadow-2xs">
+                                    <img id="res-processed-img" src="" alt="ภาพสกัดเฉพาะตัวปลา" class="max-h-full max-w-full object-contain">
+                                </div>
+                                <div>
+                                    <div class="flex items-center gap-1.5">
+                                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                        <span class="text-xs font-bold text-emerald-900">AI Background Isolated</span>
+                                    </div>
+                                    <p class="text-[11px] text-emerald-700 mt-0.5">
+                                        ตัดพื้นหลังและสิ่งรบกวนออกเรียบร้อยแล้ว โมเดลโฟกัสเฉพาะคุณลักษณะของตัวปลา
+                                    </p>
+                                </div>
+                            </div>
+                            <span class="text-[10px] font-code bg-white text-emerald-800 px-2 py-1 rounded border border-emerald-200 hidden sm:inline">
+                                Clean Canvas 224x224
+                            </span>
                         </div>
 
                         <!-- 4 Biological & Market Details Grid -->
@@ -439,8 +483,10 @@
             predictLabel.innerText = 'กำลังประมวลผลฟีเจอร์...';
             predictSpinner.classList.remove('hidden');
 
+            const isIsolateChecked = document.getElementById('toggle-isolate-bg') ? document.getElementById('toggle-isolate-bg').checked : false;
             const formData = new FormData();
             formData.append('model_name', currentModel);
+            formData.append('isolate_bg', isIsolateChecked);
             if (chosenFile) {
                 formData.append('image_file', chosenFile);
             } else if (chosenSample) {
@@ -471,6 +517,16 @@
         function renderResult(data) {
             stateEmpty.classList.add('hidden');
             stateResult.classList.remove('hidden');
+
+            // AI Processed Preview Pill
+            const procContainer = document.getElementById('processed-img-container');
+            const procImg = document.getElementById('res-processed-img');
+            if (data.processed_image) {
+                procImg.src = data.processed_image;
+                procContainer.classList.remove('hidden');
+            } else {
+                procContainer.classList.add('hidden');
+            }
 
             // Header titles
             document.getElementById('res-en-title').innerText = data.species;

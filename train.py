@@ -27,11 +27,11 @@ import joblib
 DATA_DIR = Path("data/fish_dataset")
 MODEL_DIR = Path("model")
 REPORTS_DIR = Path("reports")
-BATCH_SIZE = 32
+BATCH_SIZE = 64
 RANDOM_STATE = 42
 
 def setup_feature_extractor():
-    print("Loading pretrained MobileNetV2 for feature extraction...")
+    print("Loading pretrained MobileNetV2 for robust feature extraction...")
     weights = models.MobileNet_V2_Weights.DEFAULT
     mobilenet = models.mobilenet_v2(weights=weights)
     mobilenet.eval()
@@ -47,7 +47,7 @@ def setup_feature_extractor():
     ])
     return mobilenet, transform
 
-def extract_features(dataset, mobilenet, batch_size=32):
+def extract_features(dataset, mobilenet, batch_size=64):
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0)
     features_list = []
     labels_list = []
@@ -62,8 +62,8 @@ def extract_features(dataset, mobilenet, batch_size=32):
             feats = mobilenet(images)  # Shape: (batch_size, 1280)
             features_list.append(feats.cpu().numpy())
             labels_list.append(targets.numpy())
-            if (batch_idx + 1) % 10 == 0 or (batch_idx + 1) == len(loader):
-                print(f"Processed batch {batch_idx + 1}/{len(loader)}")
+            if (batch_idx + 1) % 15 == 0 or (batch_idx + 1) == len(loader):
+                print(f"Processed batch {batch_idx + 1}/{len(loader)} ({min((batch_idx+1)*batch_size, len(dataset))}/{len(dataset)} images)")
                 
     X = np.vstack(features_list)
     y = np.concatenate(labels_list)
@@ -105,25 +105,25 @@ def main():
     )
     print(f"Train size: {X_train.shape[0]} samples, Test size: {X_test.shape[0]} samples")
     
-    # Feature Scaling (StandardScaler)
+    # Feature Scaling (StandardScaler) fitted on Train to prevent leakage
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
     
-    # Define Scikit-learn Models
+    # Define Regularized Scikit-learn Models (Combat Overfitting)
     models_dict = {
-        "Support Vector Machine (SVM)": SVC(kernel='rbf', C=10.0, probability=True, random_state=RANDOM_STATE),
-        "Random Forest": RandomForestClassifier(n_estimators=150, max_depth=20, random_state=RANDOM_STATE, n_jobs=-1),
+        "Support Vector Machine (SVM)": SVC(kernel='rbf', C=1.0, probability=True, random_state=RANDOM_STATE),
+        "Random Forest": RandomForestClassifier(n_estimators=200, max_depth=16, min_samples_split=4, min_samples_leaf=2, random_state=RANDOM_STATE, n_jobs=-1),
         "Logistic Regression": LogisticRegression(max_iter=1000, C=1.0, random_state=RANDOM_STATE)
     }
     
     results = {}
     best_model_name = None
     best_f1 = -1.0
-    best_model_obj = None
+    fitted_models = {}
     
     print("\n" + "="*60)
-    print("STARTING MODEL TRAINING & EVALUATION")
+    print("STARTING ROBUST MULTI-BACKGROUND MODEL TRAINING")
     print("="*60)
     
     for name, clf in models_dict.items():
@@ -139,11 +139,11 @@ def main():
         rec = recall_score(y_test, y_pred, average='weighted', zero_division=0)
         f1 = f1_score(y_test, y_pred, average='weighted', zero_division=0)
         
-        print(f"Accuracy : {acc * 100:.2f}%")
-        print(f"Precision: {prec * 100:.2f}%")
-        print(f"Recall   : {rec * 100:.2f}%")
-        print(f"F1-Score : {f1 * 100:.2f}%")
-        print(f"Training time: {train_time:.2f}s")
+        print(f"Test Accuracy : {acc * 100:.2f}%")
+        print(f"Precision     : {prec * 100:.2f}%")
+        print(f"Recall        : {rec * 100:.2f}%")
+        print(f"F1-Score      : {f1 * 100:.2f}%")
+        print(f"Training time : {train_time:.2f}s")
         
         cm = confusion_matrix(y_test, y_pred)
         cm_filename = REPORTS_DIR / f"confusion_matrix_{name.replace(' ', '_').lower()}.png"
@@ -157,27 +157,28 @@ def main():
             "train_time_sec": float(train_time),
             "confusion_matrix_image": str(cm_filename)
         }
+        fitted_models[name] = clf
         
         if f1 > best_f1:
             best_f1 = f1
             best_model_name = name
-            best_model_obj = clf
             
     print("\n" + "="*60)
     print(f"BEST PERFORMING MODEL: {best_model_name} (F1: {best_f1 * 100:.2f}%)")
     print("="*60)
     
-    # Save the best model bundle
+    # Save Model Bundle with all models and formatted accuracies
     bundle = {
-        "model": best_model_obj,
-        "model_name": best_model_name,
+        "models": fitted_models,
+        "accuracies": {k: f"{v['accuracy']*100:.2f}%" for k, v in results.items()},
         "scaler": scaler,
         "class_names": class_names,
-        "metrics": results[best_model_name]
+        "best_model": best_model_name,
+        "metrics": results
     }
     model_save_path = MODEL_DIR / "fish_classifier.joblib"
     joblib.dump(bundle, model_save_path)
-    print(f"Saved best model bundle to: {model_save_path}")
+    print(f"Saved complete model bundle to: {model_save_path}")
     
     # Save full metrics JSON
     metrics_path = REPORTS_DIR / "evaluation_metrics.json"

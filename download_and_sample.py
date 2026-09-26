@@ -1,88 +1,136 @@
 import os
 import zipfile
+import io
 import subprocess
-import shutil
-from pathlib import Path
 import random
+from pathlib import Path
+from PIL import Image
 
 RAW_DIR = Path("data_raw")
+ZIP_PATH = RAW_DIR / "a-large-scale-fish-dataset.zip"
 DATA_DIR = Path("data/fish_dataset")
 SAMPLES_DIR = Path("sample_test_images")
-SAMPLE_PER_CLASS = 250  # 250 images * 9 classes = 2,250 images (optimal balance of speed and high accuracy)
+SAMPLE_BASE_PER_CLASS = 150  # 150 base * 4 versions = 600 per class * 9 = 5,400 balanced images
 
 def download_dataset():
     RAW_DIR.mkdir(parents=True, exist_ok=True)
-    zip_path = RAW_DIR / "a-large-scale-fish-dataset.zip"
-    
-    if zip_path.exists() and zip_path.stat().st_size > 100_000:
-        print(f"Found existing archive at {zip_path}")
-        return zip_path
+    if ZIP_PATH.exists() and ZIP_PATH.stat().st_size > 100_000:
+        print(f"Found existing archive at {ZIP_PATH}")
+        return ZIP_PATH
     
     print("Downloading 'crowww/a-large-scale-fish-dataset' from Kaggle...")
     cmd = ["kaggle", "datasets", "download", "-d", "crowww/a-large-scale-fish-dataset", "-p", str(RAW_DIR)]
     subprocess.run(cmd, check=True)
     print("Download completed successfully!")
-    return zip_path
+    return ZIP_PATH
 
-def sample_and_extract(zip_path):
+def sample_and_augment(zip_path):
+    # Clean existing data directory to prevent stale files
+    if DATA_DIR.exists():
+        import shutil
+        shutil.rmtree(DATA_DIR)
+        
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     SAMPLES_DIR.mkdir(parents=True, exist_ok=True)
-    
-    print(f"Opening {zip_path} and scanning images...")
+
+    print(f"Reading zip archive: {zip_path}...")
     with zipfile.ZipFile(zip_path, 'r') as z:
-        all_files = z.namelist()
+        all_files = set(z.namelist())
         
-        # Identify image files (exclude GT/masks and non-image files)
-        # Structure in dataset is typically:
-        # Fish_Dataset/Fish_Dataset/<Species>/<Species>/00001.png
-        # Fish_Dataset/Fish_Dataset/<Species>/<Species> GT/00001.png
+        # Discover species classes
         class_files = {}
         for fname in all_files:
             lower = fname.lower()
             if not (lower.endswith('.png') or lower.endswith('.jpg') or lower.endswith('.jpeg')):
                 continue
             if " gt" in lower or "_gt" in lower or "gt/" in lower:
-                # Exclude Ground Truth masks
                 continue
             
             parts = Path(fname).parts
-            # Look for folder structure
-            # Example: ('Fish_Dataset', 'Fish_Dataset', 'Sea Bass', 'Sea Bass', '00001.png')
             if len(parts) >= 4:
-                # The species name is typically parts[-2] or parts[-3]
                 species = parts[-2]
                 if "gt" in species.lower():
                     continue
                 if species not in class_files:
                     class_files[species] = []
                 class_files[species].append(fname)
+                
+        species_list = sorted(list(class_files.keys()))
+        print(f"Discovered {len(species_list)} species: {species_list}")
         
-        print(f"Detected {len(class_files)} classes: {list(class_files.keys())}")
-        
-        # Ensure repeatable sampling
         random.seed(42)
+        total_created = 0
         
-        for species, files in class_files.items():
+        # Realistic background palettes to combat domain shift
+        tint_palettes = [
+            (240, 240, 242),  # Clean light gray
+            (235, 225, 210),  # Light wooden cutting board
+            (210, 225, 235),  # Ice / water tint
+            (225, 225, 225),  # Stainless steel counter
+            (245, 238, 230),  # White-beige prep tray
+        ]
+
+        for species in species_list:
             out_class_dir = DATA_DIR / species
             out_class_dir.mkdir(parents=True, exist_ok=True)
             
-            sampled = random.sample(files, min(len(files), SAMPLE_PER_CLASS))
-            print(f"Extracting {len(sampled)} images for class: '{species}'...")
+            files = sorted(class_files[species])
+            sampled = random.sample(files, min(len(files), SAMPLE_BASE_PER_CLASS))
+            print(f"Processing {len(sampled)} base images for '{species}'...")
             
             for i, fpath in enumerate(sampled):
-                img_data = z.read(fpath)
-                out_name = f"{species.replace(' ', '_')}_{i:04d}{Path(fpath).suffix}"
-                with open(out_class_dir / out_name, "wb") as f_out:
-                    f_out.write(img_data)
+                fname_only = Path(fpath).name
+                gt_path = fpath.replace(f"/{species}/{fname_only}", f"/{species} GT/{fname_only}")
                 
-                # Also save the first image of each species to sample_test_images for Streamlit quick demo
+                img_data = z.read(fpath)
+                orig_img = Image.open(io.BytesIO(img_data)).convert("RGB")
+                
+                # 1. Original Image (Blue Tray)
+                out_orig_name = f"{species.replace(' ', '_')}_{i:04d}_orig.png"
+                orig_img.save(out_class_dir / out_orig_name)
+                total_created += 1
+                
+                # Check for GT mask
+                has_gt = gt_path in all_files
+                if has_gt:
+                    mask_data = z.read(gt_path)
+                    mask_img = Image.open(io.BytesIO(mask_data)).convert("L")
+                    
+                    # 2. White Background Image (Clean Canvas)
+                    white_canvas = Image.new("RGB", orig_img.size, (255, 255, 255))
+                    white_canvas.paste(orig_img, mask=mask_img)
+                    out_white_name = f"{species.replace(' ', '_')}_{i:04d}_white.png"
+                    white_canvas.save(out_class_dir / out_white_name)
+                    total_created += 1
+                    
+                    # 3. Synthetic Realistic Tinted Background Image
+                    tint_color = random.choice(tint_palettes)
+                    tint_canvas = Image.new("RGB", orig_img.size, tint_color)
+                    tint_canvas.paste(orig_img, mask=mask_img)
+                    out_tint_name = f"{species.replace(' ', '_')}_{i:04d}_tint.png"
+                    tint_canvas.save(out_class_dir / out_tint_name)
+                    total_created += 1
+                    
+                    # 4. Flipped White Canvas (Orientation variation)
+                    flipped_white = white_canvas.transpose(Image.FLIP_LEFT_RIGHT)
+                    out_flip_name = f"{species.replace(' ', '_')}_{i:04d}_flip.png"
+                    flipped_white.save(out_class_dir / out_flip_name)
+                    total_created += 1
+                else:
+                    # Fallback if GT missing: horizontal flip
+                    flipped = orig_img.transpose(Image.FLIP_LEFT_RIGHT)
+                    out_flip_name = f"{species.replace(' ', '_')}_{i:04d}_flip.png"
+                    flipped.save(out_class_dir / out_flip_name)
+                    total_created += 1
+                    
+                # Save demo samples
                 if i == 0:
-                    with open(SAMPLES_DIR / f"sample_{out_name}", "wb") as f_sample:
-                        f_sample.write(img_data)
+                    orig_img.save(SAMPLES_DIR / f"sample_{species.replace(' ', '_')}_0000.png")
+                    if has_gt:
+                        white_canvas.save(SAMPLES_DIR / f"sample_{species.replace(' ', '_')}_white.png")
 
-    print(f"\nSuccessfully prepared dataset in {DATA_DIR}!")
-    print(f"Sample test images available in {SAMPLES_DIR}!")
+    print(f"\n[SUCCESS] Successfully prepared multi-background dataset with {total_created} images in {DATA_DIR}!")
 
 if __name__ == "__main__":
     archive = download_dataset()
-    sample_and_extract(archive)
+    sample_and_augment(archive)
