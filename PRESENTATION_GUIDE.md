@@ -19,8 +19,8 @@
 ## ขั้นตอนการสาธิตระบบจริง (Live Demo Steps)
 1. เปิด Terminal ในโฟลเดอร์โปรเจกต์:
    ```bash
-   python app_flask.py
-   # หรือ streamlit run app.py
+   python app.py
+   # หรือ python app_flask.py (เปิดที่ http://localhost:5000)
    ```
 2. อธิบายส่วนประกอบหน้าเดียวของ Web App:
    - ฝั่งซ้าย: กล่องอัปโหลดภาพ หรือคลิกเลือกภาพตัวอย่าง 9 ชนิด

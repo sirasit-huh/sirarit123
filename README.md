@@ -86,25 +86,23 @@ Input Image (224×224) ──► MobileNetV2 (Headless) ──► 1,280-d Featur
 
 ---
 
-## 5. เว็บแอปพลิเคชัน (Web Applications)
+## 5. เว็บแอปพลิเคชัน (Web Application)
 
-โปรเจกต์นี้พัฒนาเว็บแอปพลิเคชันหน้าเดียว (Single-page Application) ให้เลือกใช้งาน 2 รูปแบบตามความเหมาะสม:
+ระบบพัฒนาเว็บแอปพลิเคชัน **Marine Fishery Intelligence System** (Tailwind CSS + DaisyUI) ดีไซน์เฉพาะสำหรับงานประมงและตลาดปลา สวยงาม คลีน ใช้งานง่าย:
 
-### ตัวเลือกที่ 1: Fishery Marine Intelligence (Flask + Tailwind CSS + DaisyUI)
 * **พอร์ต:** `http://localhost:5000`
-* **คำสั่งรัน:**
+* **คำสั่งเปิดใช้งาน:**
   ```powershell
-  .\.venv\Scripts\python.exe app_flask.py
+  python app.py
   ```
-* **จุดเด่น:** ดีไซน์สไตล์งานประมงและสะพานปลา สวยงาม คลีน เป็นมิตรต่อผู้ใช้งาน มีกล่อง Drag & Drop (รองรับการแตะถ่ายภาพจากกล้องมือถือ/แท็บเล็ต), แกลเลอรีภาพตัวอย่างปลา 9 ชนิด, และปุ่มสลับโมเดล **SVM vs Random Forest** ได้แบบ Real-time
-
-### ตัวเลือกที่ 2: Scientific Dashboard (Streamlit)
-* **พอร์ต:** `http://localhost:8501`
-* **คำสั่งรัน:**
-  ```powershell
-  .\.venv\Scripts\streamlit run app.py
-  ```
-* **จุดเด่น:** สไตล์แดชบอร์ดงานวิจัย แสดงตารางวิเคราะห์ความน่าจะเป็น และข้อมูลอนุกรมวิธานอย่างเป็นทางการ
+  *(หรือสามารถใช้คำสั่ง `python app_flask.py` ได้เช่นเดียวกัน)*
+* **จุดเด่น:**
+  1. ดีไซน์สไตล์งานประมงและสะพานปลา สวยงาม คลีน เป็นมิตรต่อผู้ใช้งาน
+  2. รองรับกล่อง Drag & Drop และแตะอัปโหลดภาพถ่ายจากมือถือ/กล้อง
+  3. ระบบ **AI Smart Background Removal** สกัดสิ่งรบกวนรอบตัวปลาออกอัตโนมัติใน ~1 วินาที ป้องกันปัญหา Overfitting จากฉากหลัง
+  4. แกลเลอรีภาพตัวอย่าง 9 ชนิดพันธุ์ปลา สำหรับคลิกทดสอบได้ทันที
+  5. ปุ่มสลับโมเดล **SVM (99.81%)**, **Logistic Regression (99.91%)**, และ **Random Forest (99.26%)** ได้แบบ Real-time
+  6. แสดงข้อมูลอนุกรมวิธาน, ถิ่นอาศัย, จุดสังเกตสัณฐานวิทยา, มูลค่าทางการตลาด, เมนูยอดนิยม, และสถิติเวกเตอร์คุณลักษณะ 1,280 มิติจริง
 
 ---
 
@@ -117,16 +115,16 @@ Input Image (224×224) ──► MobileNetV2 (Headless) ──► 1,280-d Featur
 │   ├── pipeline_architecture.png
 │   └── species_preview_grid.png
 ├── model/                           # ไฟล์บันทึกโมเดลที่ฝึกฝนเสร็จสมบูรณ์
-│   └── fish_classifier.joblib       # บันทึกทั้ง SVM และ Random Forest พร้อม Scaler
+│   └── fish_classifier.joblib       # บันทึกทั้ง 3 โมเดลพร้อม Scaler
 ├── reports/                         # รายงานผลการทดลองและไฟล์กราฟสรุป
 │   └── evaluation_metrics.json
 ├── sample_test_images/              # ภาพตัวอย่างปลา 9 ชนิดสำหรับทดสอบด่วน
 ├── templates/                       # เทมเพลตหน้าเว็บ Flask (Tailwind + DaisyUI)
 │   └── index.html
 ├── .gitignore                       # ละเว้นไฟล์ขนาดใหญ่และ .venv
-├── app.py                           # เว็บแอปพลิเคชัน Streamlit
-├── app_flask.py                     # เว็บแอปพลิเคชัน Flask (Tailwind + DaisyUI)
-├── download_and_sample.py           # สคริปต์ดาวน์โหลดและสุ่มข้อมูลจาก Kaggle
+├── app.py                           # เว็บแอปพลิเคชันหลัก Fishery Marine Intelligence (พอร์ต 5000)
+├── app_flask.py                     # Launcher สำหรับรัน app.py
+├── download_and_sample.py           # สคริปต์ดาวน์โหลดและเตรียมชุดข้อมูล Multi-Background
 ├── fish_classification_pipeline.ipynb # Jupyter Notebook แสดงโฟลการทำงานจริง 7 ขั้นตอน
 ├── train.py                         # สคริปต์สกัดฟีเจอร์และฝึกฝนโมเดล Scikit-learn
 ├── requirements.txt                 # รายการแพ็กเกจที่จำเป็น

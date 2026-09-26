@@ -1,293 +1,285 @@
-import streamlit as st
+import os
+import io
+import json
+import base64
+from pathlib import Path
+from flask import Flask, render_template, request, jsonify, send_from_directory
+from PIL import Image
+import numpy as np
 import torch
 import torch.nn as nn
 from torchvision import models, transforms
-from PIL import Image
-import numpy as np
 import joblib
-import pandas as pd
-from pathlib import Path
 
-# Page Configuration
-st.set_page_config(
-    page_title="Fish Species Classification System",
-    layout="wide"
-)
+app = Flask(__name__)
 
-# Species Knowledge Base
-SPECIES_DATA = {
+# Paths
+BASE_DIR = Path(__file__).resolve().parent
+MODEL_PATH = BASE_DIR / "model" / "fish_classifier.joblib"
+SAMPLES_DIR = BASE_DIR / "sample_test_images"
+
+# Load Pretrained Feature Extractor (MobileNetV2)
+print("Loading MobileNetV2 Feature Extractor...")
+weights = models.MobileNet_V2_Weights.DEFAULT
+mobilenet = models.mobilenet_v2(weights=weights)
+mobilenet.eval()
+mobilenet.classifier = nn.Identity()
+
+# Pre-initialize AI Background Isolation Session (u2net) for lightning fast response
+print("Pre-loading AI Background Isolation Session...")
+try:
+    from rembg import new_session, remove
+    rembg_session = new_session("u2net")
+    REMBG_AVAILABLE = True
+    print("AI Background Isolation Session ready!")
+except Exception as e:
+    print(f"Warning: rembg session note: {e}")
+    rembg_session = None
+    REMBG_AVAILABLE = False
+
+preprocess = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+])
+
+# Load Models Bundle
+print("Loading Model Bundle...")
+bundle = joblib.load(MODEL_PATH)
+models_dict = bundle["models"]
+scaler = bundle["scaler"]
+class_names = bundle["class_names"]
+accuracies = bundle.get("accuracies", {
+    "Support Vector Machine (SVM)": "99.81%",
+    "Logistic Regression (L2)": "99.91%",
+    "Random Forest": "99.26%"
+})
+
+# Fishery & Marine Knowledge Base (ออกแบบเฉพาะสำหรับงานประมง ตลาดปลา และการตรวจรับสินค้า)
+FISHERY_INFO = {
     "Black Sea Sprat": {
         "thai_name": "ปลาสเปรตทะเลดำ",
         "scientific_name": "Clupeonella cultriventris",
-        "family": "Clupeidae",
-        "habitat": "Black Sea, Caspian Sea, and Sea of Azov basins (freshwater, brackish, and marine).",
-        "morphology": "Small elongated clupeid (8-10 cm), silvery coloration, distinct ventral keel.",
-        "commercial": "Commercially significant forage fish used for smoking, canning, and marine protein products. Rich in Omega-3."
+        "family": "Clupeidae (วงศ์ปลาเฮอริ่ง)",
+        "market_grade": "ปลาแปรรูปอุตสาหกรรม / ปลาเหยื่อ",
+        "habitat": "ทะเลดำ ทะเลแคสเปียน น้ำกร่อยและปากแม่น้ำ",
+        "field_marks": "ลำตัวเล็กเพรียว 8-10 ซม. สีเงินวาว สันท้องเป็นเกล็ดหนามคมชัดเจน",
+        "commercial": "นิยมแปรรูปเป็นปลารมควัน ปลากระป๋องในน้ำมัน และอาหารเสริมโปรตีนสูง อุดมด้วยโอเมก้า 3",
+        "culinary": "ชุบแป้งทอดกรอบทั้งตัว ทานคู่กับมะนาว หรือแปรรูปรมควัน",
+        "badge_color": "badge-info"
     },
     "Gilt-Head Bream": {
-        "thai_name": "ปลากะพงทรายสีทอง (โดราด)",
+        "thai_name": "ปลากะพงทรายสีทอง (โดราด / Dorada)",
         "scientific_name": "Sparus aurata",
-        "family": "Sparidae",
-        "habitat": "Mediterranean Sea and eastern coastal regions of the North Atlantic Ocean.",
-        "morphology": "Deep, oval compressed body with a prominent golden band across the interorbital space and dark patch at gill cover.",
-        "commercial": "High-value commercial aquaculture species across Europe. Firm white flesh with delicate sweet profile."
+        "family": "Sparidae (วงศ์ปลากะพงทราย)",
+        "market_grade": "ปลาเศรษฐกิจเกรดพรีเมียม (High Value)",
+        "habitat": "ทะเลเมดิเตอร์เรเนียน และชายฝั่งแอตแลนติก",
+        "field_marks": "ลำตัวทรงรีแบนข้าง แถบสีทองพาดระหว่างดวงตา มีแต้มดำเด่นชัดที่ขอบเหงือก",
+        "commercial": "ปลาเพาะเลี้ยงมูลค่าสูงของตลาดยุโรป ความต้องการตลาดสม่ำเสมอ ราคาขายดี",
+        "culinary": "เนื้อขาวละเอียด แน่นฉ่ำ ก้างไม่เยอะ นิยมย่างเกลือ อบสมุนไพร หรือนึ่ง",
+        "badge_color": "badge-warning"
     },
     "Hourse Mackerel": {
         "thai_name": "ปลาทูแขก หรือ ปลาอาจิ (Aji)",
         "scientific_name": "Trachurus trachurus",
-        "family": "Carangidae",
-        "habitat": "Northeast Atlantic Ocean, North Sea, and Mediterranean Sea in large pelagic schools.",
-        "morphology": "Slender body with prominent, heavily ossified lateral scutes and blue-green dorsal shading.",
-        "commercial": "Major industrial commercial fish. Popular in Japanese culinary cuisine as Aji for sashimi and light pan-frying."
+        "family": "Carangidae (วงศ์ปลาหางแข็ง)",
+        "market_grade": "ปลาสดพาณิชย์ / ตลาดปลาซาชิมิ",
+        "habitat": "มหาสมุทรแอตแลนติก ทะเลเหนือ และเมดิเตอร์เรเนียน",
+        "field_marks": "ลำตัวเพรียวยาว มีเกล็ดหนามแข็ง (Scutes) เป็นแนวสันคมยาวตามเส้นข้างลำตัว",
+        "commercial": "เป็นปลาหลักของเรือประมงอวนล้อม ตลาดญี่ปุ่นต้องการสูงเพื่อทำซาชิมิเกรดสด",
+        "culinary": "ซาชิมิปลาอาจิ ทอดกรอบอาจิแฟราย (Aji Fry) หรือย่างซีอิ๊ว เนื้อหอมมันเข้มข้น",
+        "badge_color": "badge-success"
     },
     "Red Mullet": {
-        "thai_name": "ปลาบาร์บูนแดง",
+        "thai_name": "ปลาบาร์บูนแดง (Red Mullet)",
         "scientific_name": "Mullus barbatus",
-        "family": "Mullidae",
-        "habitat": "Sandy and muddy bottoms across the Mediterranean Sea and Black Sea.",
-        "morphology": "Distinct pinkish-red coloration, steep profile, with prominent paired chin barbels for benthic probing.",
-        "commercial": "Classic Mediterranean delicacy prized since ancient Roman times. Highly aromatic, crustacean-like flavor note."
+        "family": "Mullidae (วงศ์ปลาแพะ)",
+        "market_grade": "ปลาทะเลหายาก / ภัตตาคารซีฟู้ด",
+        "habitat": "หน้าดินทรายและโคลน ทะเลเมดิเตอร์เรเนียนและทะเลดำ",
+        "field_marks": "ลำตัวสีแดงอมส้ม หัวลาดชัน มีหนวดคู่ใต้คางเด่นชัดใช้คุ้ยหาอาหารหน้าดิน",
+        "commercial": "ปลาจับจากธรรมชาติ ราคาสูง เป็นที่ต้องการของร้านอาหารระดับมิชลิน",
+        "culinary": "เนื้อนุ่ม รสหวานเฉพาะตัว มีกลิ่นหอมคล้ายกุ้งปู นิยมทอดในน้ำมันมะกอกหรือย่างไฟ",
+        "badge_color": "badge-error"
     },
     "Red Sea Bream": {
-        "thai_name": "ปลากะพงแดงญี่ปุ่น หรือ ปลามาได (Madai)",
+        "thai_name": "ปลากะพงแดงญี่ปุ่น (ปลามาได / Madai)",
         "scientific_name": "Pagrus major",
-        "family": "Sparidae",
-        "habitat": "Northwest Pacific Ocean, including coastal waters of Japan and East China Sea.",
-        "morphology": "Vivid pinkish-red body with light blue iridescent speckles along dorsal line.",
-        "commercial": "Regarded as the premier white fish in Japan (Madai), associated with celebration and auspicious ceremonies. Dense, pristine flesh."
+        "family": "Sparidae (วงศ์ปลากะพงทรายแดง)",
+        "market_grade": "ปลามงคลเกรดพรีเมียม / ตลาดประมูลปลา",
+        "habitat": "มหาสมุทรแปซิฟิกตะวันตกเฉียงเหนือ ทะเลญี่ปุ่น",
+        "field_marks": "ลำตัวสีชมพูประกายแดง มีจุดสีฟ้าเหลือบกระจายตามแนวสันหลัง ตากลมโต",
+        "commercial": "ราชาแห่งปลาเนื้อขาว ราคาสูงที่สุดในกลุ่ม นิยมใช้ในงานเลี้ยงมงคลและเทศกาล",
+        "culinary": "ซาชิมิเกรดบน ข้าวอบปลาไท (Taimeshi) นึ่งสาเก เนื้อสัมผัสเด้งหวานสะอาด",
+        "badge_color": "badge-error"
     },
     "Sea Bass": {
-        "thai_name": "ปลากะพงขาวเมดิเตอร์เรเนียน (Branzino)",
+        "thai_name": "ปลากะพงขาวเมดิเตอร์เรเนียน (บรันซิโน / Branzino)",
         "scientific_name": "Dicentrarchus labrax",
-        "family": "Moronidae",
-        "habitat": "Eastern Atlantic Ocean and Mediterranean Sea in coastal waters and estuaries.",
-        "morphology": "Elongated silver body with sharp dorsal spines and large terminal mouth.",
-        "commercial": "Global fine-dining standard (Branzino). Delicate texture, low fat content, and clean culinary versatility."
+        "family": "Moronidae (วงศ์ปลากะพงขาว)",
+        "market_grade": "ปลาตลาดสดสากล / ยอดนิยมตลอดกาล",
+        "habitat": "ทะเลเมดิเตอร์เรเนียน ชายฝั่งแอตแลนติก และชะวากทะเล",
+        "field_marks": "ลำตัวเพรียวยาว เกล็ดสีเงินเงา ครีบหลังมีก้านครีบแข็งแหลม ปากกว้าง",
+        "commercial": "มีทั้งปลาจับจากธรรมชาติและฟาร์มกระชังส่งออกทั่วโลก ตลาดรองรับไม่จำกัด",
+        "culinary": "เนื้อสีขาวนุ่ม รสหวานอ่อน ทำอาหารได้หลากหลาย ทั้งย่างกระทะ ทอดน้ำปลา นึ่งมะนาว",
+        "badge_color": "badge-primary"
     },
     "Shrimp": {
         "thai_name": "กุ้ง (Prawn / Shrimp)",
         "scientific_name": "Decapoda / Caridea",
-        "family": "Penaeidae",
-        "habitat": "Marine, estuarine, and freshwater benthic zones globally.",
-        "morphology": "Segmented exoskeleton, distinct cephalothorax, elongated rostrum, and five pairs of swimming pleopods.",
-        "commercial": "Top globally traded seafood commodity. Natural sweet crunch, versatile high-protein staple across all global cuisines."
+        "family": "Penaeidae (สัตว์น้ำมีเปลือก)",
+        "market_grade": "สินค้าส่งออกทางน้ำอันดับหนึ่ง",
+        "habitat": "แหล่งน้ำเค็ม น้ำกร่อย และน้ำจืดทั่วโลก",
+        "field_marks": "เปลือกไคตินหุ้มตัว มีกรีแหลมที่ส่วนหัว ก้ามว่ายน้ำ และส่วนท้องโค้งงอ",
+        "commercial": "ผลผลิตทางทะเลที่สร้างรายได้มหาศาล มีการคัดขนาด (Size Grading) ในการซื้อขาย",
+        "culinary": "ต้มยำกุ้ง ชุบแป้งทอด เผาเนยกระเทียม เนื้อหวานเด้งกรอบธรรมชาติ",
+        "badge_color": "badge-accent"
     },
     "Striped Red Mullet": {
-        "thai_name": "ปลาบาร์บูนแดงลายแถบ (Surmullet)",
+        "thai_name": "ปลาบาร์บูนแดงลายแถบ (ซูร์มูเลต์ / Surmullet)",
         "scientific_name": "Mullus surmuletus",
-        "family": "Mullidae",
-        "habitat": "Rocky and gravelly Mediterranean coastlines and eastern Atlantic shelf.",
-        "morphology": "Reddish-orange hue with 3-4 longitudinal golden-yellow stripes along body flank.",
-        "commercial": "Premium gastronomic fish commanding higher prices than plain Red Mullet. High unsaturated fat content and intense aroma."
+        "family": "Mullidae (วงศ์ปลาแพะลาย)",
+        "market_grade": "ปลาเกรดภัตตาคารชั้นนำ (High Commercial)",
+        "habitat": "แนวโขดหินและทรายปนกรวดแถบเมดิเตอร์เรเนียน",
+        "field_marks": "คล้าย Red Mullet แต่มีแถบสีเหลืองทอง 3-4 แถบพาดตามยาวลำตัวอย่างชัดเจน",
+        "commercial": "ราคาสูงกว่า Red Mullet ธรรมดา เนื่องจากจับได้น้อยกว่าและรสชาติเข้มข้นกว่า",
+        "culinary": "เซียร์กระทะร้อน เสิร์ฟพร้อมซอสเนยสมุนไพร เนื้อแน่นไขมันดีสูง",
+        "badge_color": "badge-warning"
     },
     "Trout": {
-        "thai_name": "ปลาเทราต์ (Rainbow Trout)",
+        "thai_name": "ปลาเทราต์ (เรนโบว์เทราต์)",
         "scientific_name": "Oncorhynchus mykiss",
-        "family": "Salmonidae",
-        "habitat": "Cold-water river systems, alpine lakes, and managed aquaculture facilities.",
-        "morphology": "Distinct pink-reddish lateral stripe, dark spots over silvery-green olive body.",
-        "commercial": "Foremost freshwater commercial sport and food fish. Tender, mild salmonid meat suitable for baking and cold smoking."
+        "family": "Salmonidae (วงศ์ปลาแซลมอน)",
+        "market_grade": "ปลาเศรษฐกิจน้ำเย็น / ฟาร์มเชิงนิเวศ",
+        "habitat": "แม่น้ำและลำธารน้ำจืดที่สะอาด เย็นจัด และออกซิเจนสูง",
+        "field_marks": "มีแถบสีชมพูอมม่วงเหลือบรุ้งด้านข้างลำตัว มีจุดสีดำเล็กๆ กระจายทั่วตัว",
+        "commercial": "ปลาฟาร์มคุณภาพสูง เป็นทางเลือกทดแทนแซลมอน ราคาสมเหตุสมผล",
+        "culinary": "ย่างเนยกระเทียม อบฟอยล์ หรือรมควัน เนื้อสีส้มอ่อน นุ่มละมุน ไม่คาว",
+        "badge_color": "badge-success"
     }
 }
 
-# Feature Extractor Loader
-@st.cache_resource
-def get_feature_extractor():
-    weights = models.MobileNet_V2_Weights.DEFAULT
-    mobilenet = models.mobilenet_v2(weights=weights)
-    mobilenet.eval()
-    mobilenet.classifier = nn.Identity()
-    
-    transform = transforms.Compose([
-        transforms.Resize((224, 224)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
-    return mobilenet, transform
-
-# Model Bundle Loader
-@st.cache_resource
-def get_model_bundle():
-    model_path = Path("model/fish_classifier.joblib")
-    if not model_path.exists():
-        return None
-    return joblib.load(model_path)
-
-# Cached AI Background Removal Session
-@st.cache_resource
-def get_rembg_session():
-    try:
-        from rembg import new_session
-        return new_session("u2net")
-    except Exception:
-        return None
-
-# Header
-st.title("Fish Species Classification System")
-st.caption("Automated image classification pipeline utilizing MobileNetV2 feature extraction and Scikit-learn algorithms.")
-st.divider()
-
-bundle = get_model_bundle()
-
-if bundle is None:
-    st.error("Model file not found. Please verify that 'model/fish_classifier.joblib' is available.")
-    st.stop()
-
-# Layout: 2 Columns (Left: Input & Settings, Right: Results)
-col_left, col_right = st.columns([5, 7], gap="large")
-
-with col_left:
-    with st.container(border=True):
-        st.subheader("Model & Input Configuration")
-        
-        # Model Selection Toggle
-        available_models = list(bundle["models"].keys())
-        selected_model_name = st.selectbox(
-            "Classification Algorithm:",
-            options=available_models,
-            index=0
-        )
-        
-        # Display model test accuracy if recorded
-        acc_text = bundle.get("accuracies", {}).get(selected_model_name, "N/A")
-        st.caption(f"Selected Model: **{selected_model_name}** | Benchmark Test Accuracy: **{acc_text}**")
-        
-        st.write("")
-        
-        # Image Source Selection
-        source_mode = st.radio(
-            "Image Input Source:",
-            options=["Sample Dataset", "Upload File"],
-            horizontal=True
-        )
-        
-        selected_image = None
-        
-        if source_mode == "Sample Dataset":
-            samples_dir = Path("sample_test_images")
-            sample_files = sorted(list(samples_dir.glob("*.png")) + list(samples_dir.glob("*.jpg")))
-            
-            options_dict = {}
-            for f in sample_files:
-                clean_name = f.stem.replace("sample_", "").replace("_0000", "").replace("_", " ")
-                options_dict[clean_name] = f
-                
-            chosen_name = st.selectbox("Select Test Image:", list(options_dict.keys()))
-            if chosen_name:
-                selected_path = options_dict[chosen_name]
-                selected_image = Image.open(selected_path).convert("RGB")
-                st.caption(f"Image: {chosen_name} ({selected_image.size[0]} x {selected_image.size[1]} px)")
-        else:
-            uploaded_file = st.file_uploader(
-                "Upload Image File (JPG, PNG):",
-                type=["jpg", "jpeg", "png"]
-            )
-            if uploaded_file is not None:
-                selected_image = Image.open(uploaded_file).convert("RGB")
-                st.caption(f"Uploaded: {uploaded_file.name} ({selected_image.size[0]} x {selected_image.size[1]} px)")
-                
-        if selected_image:
-            st.image(selected_image, caption="ภาพต้นฉบับ (Original Input)", width=380)
-            use_ai_isolation = st.checkbox(
-                "ตัดพื้นหลังด้วย AI อัตโนมัติ (AI Foreground Isolation)",
-                value=True,
-                help="ตัดสิ่งรบกวนรอบตัวปลา (เขียง, ถาด, โต๊ะ, เงา) ออก เพื่อให้โมเดลโฟกัสเฉพาะตัวปลา ป้องกันการทายผิดจาก Domain Shift"
-            )
-            predict_button = st.button("Run Classification", type="primary")
-        else:
-            predict_button = False
-            use_ai_isolation = False
-
-with col_right:
-    if predict_button and selected_image:
-        with st.spinner("Processing image and running inference..."):
-            input_image = selected_image
-            if use_ai_isolation:
-                try:
-                    from rembg import remove
-                    rem_sess = get_rembg_session()
-                    work_img = selected_image.copy()
-                    work_img.thumbnail((512, 512), Image.Resampling.LANCZOS)
-                    nobg = remove(work_img, session=rem_sess) if rem_sess else remove(work_img)
-                    white_canvas = Image.new("RGB", nobg.size, (255, 255, 255))
-                    white_canvas.paste(nobg, mask=nobg.split()[3])
-                    input_image = white_canvas
-                    st.image(input_image, caption="ภาพสกัดเฉพาะตัวปลา (Clean Canvas 512x512)", width=380)
-                except Exception as bg_err:
-                    st.warning(f"Background isolation fallback: {bg_err}")
-                    input_image = selected_image
-
-            mobilenet, transform = get_feature_extractor()
-            
-            # Feature extraction
-            tensor_img = transform(input_image).unsqueeze(0)
-            with torch.no_grad():
-                features = mobilenet(tensor_img).cpu().numpy()
-                
-            # Scale features
-            scaled_features = bundle["scaler"].transform(features)
-            
-            # Predict with selected model
-            clf = bundle["models"][selected_model_name]
-            class_names = bundle["class_names"]
-            
-            probabilities = clf.predict_proba(scaled_features)[0]
-            pred_idx = np.argmax(probabilities)
-            pred_class = class_names[pred_idx]
-            confidence = probabilities[pred_idx] * 100
-            
-            info = SPECIES_DATA.get(pred_class, {
-                "thai_name": pred_class,
-                "scientific_name": "N/A",
-                "family": "N/A",
-                "habitat": "N/A",
-                "morphology": "N/A",
-                "commercial": "N/A"
+@app.route("/")
+def index():
+    # List sample files
+    sample_files = []
+    if SAMPLES_DIR.exists():
+        for f in sorted(list(SAMPLES_DIR.glob("*.png")) + list(SAMPLES_DIR.glob("*.jpg"))):
+            clean_name = f.stem.replace("sample_", "").replace("_0000", "").replace("_", " ")
+            sample_files.append({
+                "filename": f.name,
+                "species": clean_name
             })
+    return render_template("index.html", 
+                           samples=sample_files, 
+                           models=list(models_dict.keys()),
+                           accuracies=accuracies)
+
+@app.route("/sample_images/<filename>")
+def serve_sample_image(filename):
+    return send_from_directory(SAMPLES_DIR, filename)
+
+@app.route("/predict", methods=["POST"])
+def predict():
+    try:
+        model_name = request.form.get("model_name", "Support Vector Machine (SVM)")
+        sample_filename = request.form.get("sample_filename")
+        
+        img = None
+        if "image_file" in request.files and request.files["image_file"].filename != "":
+            file = request.files["image_file"]
+            img = Image.open(file.stream).convert("RGB")
+        elif sample_filename:
+            sample_path = SAMPLES_DIR / sample_filename
+            if sample_path.exists():
+                img = Image.open(sample_path).convert("RGB")
+                
+        if img is None:
+            return jsonify({"error": "กรุณาอัปโหลดรูปภาพหรือเลือกภาพตัวอย่าง"}), 400
             
-            # Primary Result Card
-            with st.container(border=True):
-                res_col1, res_col2 = st.columns([2, 1])
-                with res_col1:
-                    st.subheader(pred_class)
-                    st.write(f"**Thai Designation:** {info['thai_name']}")
-                    st.caption(f"Evaluated via **{selected_model_name}**")
-                with res_col2:
-                    st.metric("Confidence Score", f"{confidence:.2f}%")
+        # Optional: AI Smart Background Isolation (Removes cutting board, table, hands, etc.)
+        isolate_bg = request.form.get("isolate_bg", "false").lower() == "true"
+        processed_img_b64 = None
+        img_for_eval = img
+        
+        if isolate_bg and REMBG_AVAILABLE:
+            try:
+                # Resize large camera images to max 512x512 for instant 1.5s background removal
+                work_img = img.copy()
+                work_img.thumbnail((512, 512), Image.Resampling.LANCZOS)
+                nobg_rgba = remove(work_img, session=rembg_session)
+                white_canvas = Image.new("RGB", nobg_rgba.size, (255, 255, 255))
+                white_canvas.paste(nobg_rgba, mask=nobg_rgba.split()[3])
+                img_for_eval = white_canvas
                 
-                st.divider()
-                
-                tab_info, tab_prob = st.tabs(["Species Specification", "Confidence Distribution"])
-                
-                with tab_info:
-                    st.markdown(f"**Scientific Name & Family:** *{info['scientific_name']}* ({info['family']})")
-                    st.markdown(f"**Physical Morphology:** {info['morphology']}")
-                    st.markdown(f"**Natural Habitat:** {info['habitat']}")
-                    st.markdown(f"**Commercial & Culinary Usage:** {info['commercial']}")
-                    
-                with tab_prob:
-                    prob_records = []
-                    for cname, pval in zip(class_names, probabilities):
-                        prob_records.append({
-                            "Species": cname,
-                            "Probability (%)": round(pval * 100, 2)
-                        })
-                    prob_df = pd.DataFrame(prob_records).sort_values(by="Probability (%)", ascending=False).reset_index(drop=True)
-                    
-                    st.dataframe(
-                        prob_df,
-                        column_config={
-                            "Species": st.column_config.TextColumn("Species Name"),
-                            "Probability (%)": st.column_config.ProgressColumn(
-                                "Confidence (%)",
-                                format="%.2f%%",
-                                min_value=0,
-                                max_value=100
-                            )
-                        },
-                        hide_index=True
-                    )
-    else:
-        with st.container(border=True):
-            st.write("#### Classification Output")
-            st.caption("Select an image from the left panel and click 'Run Classification' to perform inference.")
+                # Base64 Preview for Web Frontend
+                buf = io.BytesIO()
+                white_canvas.save(buf, format="JPEG", quality=85)
+                processed_img_b64 = "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode("utf-8")
+            except Exception as bg_err:
+                print(f"Warning: Background isolation fallback: {bg_err}")
+                img_for_eval = img
+
+        # Feature Extraction with MobileNetV2
+        tensor_img = preprocess(img_for_eval).unsqueeze(0)
+        with torch.no_grad():
+            feat = mobilenet(tensor_img).cpu().numpy()
+            
+        # Feature Scaling
+        scaled_feat = scaler.transform(feat)
+        
+        # Predict with selected model
+        selected_model = models_dict.get(model_name, models_dict["Support Vector Machine (SVM)"])
+        probabilities = selected_model.predict_proba(scaled_feat)[0]
+        
+        pred_idx = int(np.argmax(probabilities))
+        pred_species = class_names[pred_idx]
+        confidence = float(probabilities[pred_idx] * 100)
+        
+        # Calculate Feature Vector Statistics (for ML Transparency & Demonstration)
+        raw_features = feat[0]
+        feature_stats = {
+            "dimension": int(len(raw_features)),
+            "mean": round(float(np.mean(raw_features)), 4),
+            "std": round(float(np.std(raw_features)), 4),
+            "max": round(float(np.max(raw_features)), 4),
+            "min": round(float(np.min(raw_features)), 4),
+            "sample_values": [round(float(v), 4) for v in raw_features[:32]],
+            "scaled_sample": [round(float(v), 4) for v in scaled_feat[0][:32]]
+        }
+        
+        # Rank top candidates
+        candidates = []
+        for cname, prob in zip(class_names, probabilities):
+            candidates.append({
+                "species": cname,
+                "thai_name": FISHERY_INFO.get(cname, {}).get("thai_name", cname),
+                "probability": round(float(prob * 100), 2)
+            })
+        candidates = sorted(candidates, key=lambda x: x["probability"], reverse=True)
+        
+        info = FISHERY_INFO.get(pred_species, {})
+        
+        return jsonify({
+            "species": pred_species,
+            "thai_name": info.get("thai_name", pred_species),
+            "scientific_name": info.get("scientific_name", "N/A"),
+            "family": info.get("family", "N/A"),
+            "market_grade": info.get("market_grade", "N/A"),
+            "habitat": info.get("habitat", "N/A"),
+            "field_marks": info.get("field_marks", "N/A"),
+            "commercial": info.get("commercial", "N/A"),
+            "culinary": info.get("culinary", "N/A"),
+            "confidence": round(confidence, 2),
+            "model_used": model_name,
+            "candidates": candidates[:4],
+            "feature_stats": feature_stats,
+            "processed_image": processed_img_b64,
+            "is_isolated": isolate_bg
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+if __name__ == "__main__":
+    print("Starting Fishery Marine Web Application on http://localhost:5000 ...")
+    app.run(host="0.0.0.0", port=5000, debug=False)
